@@ -4,6 +4,8 @@ const express = require("express");
 const ExpressError = require("../expressError");
 const router = express.Router();
 const db = require("../db");
+const slugify = require('slugify');
+
 
 router.get("/", async (req, res, next) => {
 	try {
@@ -18,14 +20,21 @@ router.get("/:code", async (req, res, next) => {
 	try {
 		const { code } = req.params;
 		const result = await db.query(
-			"SELECT * FROM companies JOIN invoices ON companies.code = invoices.comp_Code WHERE code=$1",
+			"SELECT * FROM companies FULL JOIN invoices ON companies.code = invoices.comp_code WHERE code=$1",
 			[code]
 		);
 		if (!result.rows[0]) {
 			throw new ExpressError(`${code} not found`, 404);
 		}
+		const res1 = await db.query(`SELECT c.name, i.industry FROM companies AS c JOIN industries_companies AS inco ON c.code = inco.company_code JOIN industries AS i ON inco.industry_code = i.code WHERE c.code=$1`, [code]);
+
 		const { name, description } = result.rows[0];
 		const invoices = [];
+		const industries = [];
+		for (let row of res1.rows) {
+			const industry = { industry: row["industry"] };
+			industries.push(industry);
+		}
 		for (let row of result.rows) {
 			const invoice = {
 				id: row["id"],
@@ -37,9 +46,10 @@ router.get("/:code", async (req, res, next) => {
 			};
 			invoices.push(invoice);
 		}
-		return res.json({
+		return res.status(200).json({
 			company: { code, name, description },
 			invoices: invoices,
+			industries: industries,
 		});
 	} catch (e) {
 		return next(e);
@@ -48,7 +58,15 @@ router.get("/:code", async (req, res, next) => {
 
 router.post("/", async (req, res, next) => {
 	try {
-		const { code, name, description } = req.body;
+		const { name, description } = req.body;
+		const code = slugify(name, {
+			replacement: '_',
+			remove: undefined,
+			lower: true,
+			strict: true,
+			locale: 'vi'
+		})
+		
 		const results = await db.query(
 			"INSERT INTO companies (code, name, description) VALUES ($1, $2, $3) RETURNING *",
 			[code, name, description]

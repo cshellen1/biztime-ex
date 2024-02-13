@@ -3,6 +3,8 @@ const ExpressError = require("../expressError");
 const router = express.Router();
 const db = require("../db");
 
+const currDate = new Date();
+
 router.get("/", async (req, res, next) => {
 	try {
 		const result = await db.query("SELECT id, comp_code FROM invoices");
@@ -75,7 +77,7 @@ router.post("/", async (req, res, next) => {
 			"INSERT INTO invoices (comp_code, amt) VALUES ($1, $2) RETURNING *",
 			[comp_code, amt]
 		);
-		return res.json({ invoice: result.rows[0] });
+		return res.status(201).json({ invoice: result.rows[0] });
 	} catch (e) {
 		return next(e);
 	}
@@ -85,14 +87,51 @@ router.patch("/:id", async (req, res, next) => {
 	try {
 		const { amt } = req.body;
 		const { id } = req.params;
-		const result = await db.query(
-			"UPDATE invoices SET amt=$2 WHERE id=$1 RETURNING *",
-			[id, amt]
-		);
-		if (!result.rows[0]) {
-			throw new ExpressError(`${id} cannot be found`, 404);
+		const { paid } = req.body;
+
+		if (paid) {
+			const day = currDate.getDate();
+			const month = currDate.getMonth();
+			const year = currDate.getYear();
+			const paidDate = `${year}-${month}-${day}`;
+			
+			const result = await db.query(
+				"UPDATE invoices SET amt=$4, paid=$2, paid_date=$3 WHERE id=$1 RETURNING *",
+				[id, paid, paidDate, amt]
+			);
+			if (!result.rows[0]) {
+				throw new ExpressError(
+					`Need to enter valid amount, commpany id, and paid status.`,
+					404
+				);
+			}
+			return res.json({ invoice: result.rows[0] });
+		} else if (!paid) {
+			const paidDate = null;
+			const result = await db.query(
+				"UPDATE invoices SET amt=$4, paid=$2, paid_date=$3 WHERE id=$1 RETURNING *",
+				[id, paid, paidDate, amt]
+			);
+			if (!result.rows[0]) {
+				throw new ExpressError(
+					`Need to enter valid amount, commpany id, and paid status.`,
+					404
+				);
+			}
+			return res.json({ invoice: result.rows[0] });
+		} else {
+			const result = await db.query(
+				"UPDATE invoices SET amt=$4 WHERE id=$1 RETURNING *",
+				[id, amt]
+			);
+			if (!result.rows[0]) {
+				throw new ExpressError(
+					`Need to enter valid amount, commpany id, and paid status.`,
+					404
+				);
+			}
+			return res.json({ invoice: result.rows[0] });
 		}
-		return res.json({ invoice: result.rows[0] });
 	} catch (e) {
 		next(e);
 	}
@@ -106,6 +145,23 @@ router.delete("/:id", async (req, res, next) => {
 			throw new ExpressError(`${id} cannot be found`, 404);
 		}
 		return res.json({ status: "deleted" });
+	} catch (e) {
+		return next(e);
+	}
+});
+
+router.patch("/:id", async (req, res, next) => {
+	try {
+		const { id } = req.params;
+		const { amt, paid } = req.body;
+		const results = await db.query(
+			"UPDATE invoicess SET amt=$2, paid=$3 WHERE id=$1 RETURNING *",
+			[id, amt, paid]
+		);
+		if (!results.rows[0]) {
+			throw new ExpressError(`${code} cannot be found`, 404);
+		}
+		return res.json({ invoice: results.rows[0] });
 	} catch (e) {
 		return next(e);
 	}

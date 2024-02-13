@@ -5,8 +5,11 @@ const request = require("supertest");
 const db = require("../db");
 
 let testComp;
+let testInv;
 beforeEach(async () => {
   const result = await db.query(`INSERT INTO companies (code, name, description) VALUES ('test', 'TEST', 'This is only a test.') RETURNING *;`);
+  const res = await db.query(`INSERT INTO invoices (comp_code, amt) VALUES ('test', '1500') RETURNING *`);
+  testInv = res.rows[0];
   testComp = result.rows[0];
 });
 
@@ -16,7 +19,7 @@ afterEach(async () => {
 })
 
 afterAll(async () => {
-  await db.end()
+  await db.end();
 })
 
 describe("GET /companies", () => {
@@ -30,8 +33,10 @@ describe("GET /companies", () => {
 describe("GET /companies/:code", () => {
   test("Get a single company", async () => {
     const result = await request(app).get(`/companies/${testComp.code}`);
+    console.log(testComp.code);
     expect(result.statusCode).toBe(200);
-    expect(result.body).toEqual({ company: testComp });
+    expect(result.body.company.code).toEqual(testComp.code);
+    expect(result.body.invoices[0].id).toEqual(testInv.id);
   })
 
   test("Responds with 404 if invalid id.", async () => {
